@@ -9,6 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 import droiddeck_compat as dd
 import paths
+import steam_utils
 
 
 class TestDroidDeckCompat(unittest.TestCase):
@@ -48,6 +49,28 @@ class TestDroidDeckCompat(unittest.TestCase):
         self.assertEqual(dd.steam_roots("/root", {"LUMADECK_STEAM_ROOT": "/custom"}, None)[0],
                          "/custom")
         self.assertNotIn("relative", dd.steam_roots("/root", {"LUMADECK_STEAM_ROOT": "relative"}, None))
+
+    def test_library_lookup_uses_only_the_selected_guest_home(self):
+        with tempfile.TemporaryDirectory() as home, patch.object(paths, "_REAL_HOME", home):
+            native = Path(home, ".local/share/Steam")
+            native.mkdir(parents=True)
+            (native / "steam.sh").touch()
+            env = {"LUMADECK_DROIDDECK": "1", "DD_STEAM_CLIENT_ARCH": "arm64"}
+            with patch.dict(os.environ, env, clear=True):
+                self.assertEqual(Path(steam_utils.detect_steam_install_path()), native)
+                os.environ["DD_STEAM_CLIENT_ARCH"] = "x86_64"
+                self.assertIsNone(paths.find_steam_root())
+                self.assertEqual(steam_utils.detect_steam_install_path(), "")
+                fex = Path(home, ".droiddeck-x64/.local/share/Steam")
+                fex.mkdir(parents=True)
+                self.assertEqual(Path(steam_utils.detect_steam_install_path()), fex)
+
+    def test_launcher_selection_wins_over_other_client_process(self):
+        env = {"DD_STEAM_CLIENT_ARCH": "x86_64"}
+        with tempfile.TemporaryDirectory() as proc, patch.dict(os.environ, env, clear=True):
+            Path(proc, "123").mkdir()
+            Path(proc, "123", "cmdline").write_bytes(b"/root/.local/share/Steam/steamrtarm64/steam\0")
+            self.assertEqual(paths.detect_steam_client_arch(proc), paths.STEAM_CLIENT_64)
 
     def test_architecture_detection_arm64(self):
         with tempfile.TemporaryDirectory() as proc:

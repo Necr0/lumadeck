@@ -147,8 +147,6 @@ def real_uid() -> int:
 
 
 _STEAM_PATHS = _build_steam_paths(_REAL_HOME, _EXPANDED_HOME)
-if _is_droiddeck():
-    _STEAM_PATHS = list(dict.fromkeys(_dd_steam_roots(_REAL_HOME) + _STEAM_PATHS))
 
 
 def _home_candidates(home, expanded, home_rels, expanded_rels=None, extras=()):
@@ -166,6 +164,8 @@ def _home_candidates(home, expanded, home_rels, expanded_rels=None, extras=()):
 def steam_root_candidates() -> list:
     """Canonical Steam-root candidate list (a fresh copy). The single source of
     truth other modules must use instead of keeping their own hardcoded copy."""
+    if _is_droiddeck():
+        return _dd_steam_roots(_REAL_HOME)
     return list(_STEAM_PATHS)
 
 
@@ -179,10 +179,11 @@ def home_candidates(home_rels, expanded_rels=None, extras=()) -> list:
 
 def find_steam_root() -> Optional[str]:
     """Search well-known locations for the Steam installation."""
-    for path in _STEAM_PATHS:
+    candidates = steam_root_candidates()
+    for path in candidates:
         if os.path.isdir(path) and os.path.isfile(os.path.join(path, "steam.sh")):
             return path
-    for path in _STEAM_PATHS:
+    for path in candidates:
         if os.path.isdir(path):
             return path
     return None
@@ -400,6 +401,9 @@ def detect_steam_client_arch(proc_root: str = "/proc", steam_root: Optional[str]
     """One pass over /proc/*/cmdline for a Steam client binary; the marker as
     the fallback; the 32-bit client as the answer for everything else."""
     import glob as _glob
+    if _is_droiddeck():
+        client = _dd_client(proc_root=proc_root)
+        return STEAM_CLIENT_64 if client == "x86_64" else STEAM_CLIENT_ARM64
     try:
         for cmd_path in _glob.glob(os.path.join(proc_root, "*", "cmdline")):
             try:
@@ -415,8 +419,6 @@ def detect_steam_client_arch(proc_root: str = "/proc", steam_root: Optional[str]
                 return STEAM_CLIENT_32
     except Exception:
         pass
-    if _is_droiddeck():
-        return STEAM_CLIENT_64 if _dd_client() == "x86_64" else STEAM_CLIENT_ARM64
     root = steam_root if steam_root is not None else find_steam_root()
     if root and os.path.exists(os.path.join(root, _STEAM_CLIENT_MARKER)):
         return STEAM_CLIENT_64

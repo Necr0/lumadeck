@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import glob
 import os
+import posixpath
 from typing import Mapping, Optional
 
 
@@ -52,17 +53,16 @@ def selected_client(environ: Optional[Mapping[str, str]] = None,
 def steam_roots(real_home: str,
                 environ: Optional[Mapping[str, str]] = None,
                 proc_root: Optional[str] = "/proc") -> list[str]:
-    """The selected client's Steam root wins; the other is a fallback."""
+    """Resolve Linux guest paths within the selected client's own home."""
     env = os.environ if environ is None else environ
-    native = [os.path.join(real_home, ".local", "share", "Steam"),
-              os.path.join(real_home, ".steam", "steam")]
-    x64_home = env.get("DD_X64_HOME") or os.path.join(real_home, ".droiddeck-x64")
-    if not os.path.isabs(x64_home):
-        x64_home = os.path.join(real_home, ".droiddeck-x64")
-    x64 = [os.path.join(x64_home, ".local", "share", "Steam"),
-           os.path.join(x64_home, ".steam", "steam")]
-    roots = (x64 + native) if selected_client(env, proc_root) == "x86_64" else (native + x64)
+    client_home = real_home
+    if selected_client(env, proc_root) == "x86_64":
+        client_home = env.get("DD_X64_HOME", "")
+        if not posixpath.isabs(client_home):
+            client_home = posixpath.join(real_home, ".droiddeck-x64")
+    roots = [posixpath.join(client_home, ".local/share/Steam"),
+             posixpath.join(client_home, ".steam/steam")]
     explicit = env.get("LUMADECK_STEAM_ROOT", "")
-    if explicit and os.path.isabs(explicit):
-        roots.insert(0, os.path.normpath(explicit))
+    if posixpath.isabs(explicit):
+        roots.insert(0, posixpath.normpath(explicit))
     return list(dict.fromkeys(roots))

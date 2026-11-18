@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-from typing import Dict, Optional
+from typing import Dict
 
-from paths import find_steam_root, real_home, steam_root_candidates
+from paths import find_steam_root, real_home
 from subprocess_env import clean_env
 
 try:
@@ -17,28 +17,8 @@ except ImportError:
     import logging
     logger = logging.getLogger("lumadeck")
 
-_STEAM_INSTALL_PATH: Optional[str] = None
-
-# Single source of truth: the canonical Steam-root candidate list from paths.py
-# (which resolves the real user's home via platform_info). Was a duplicated
-# hardcoded /home/deck copy; now deduplicated so it can never drift.
-_LINUX_STEAM_PATHS = steam_root_candidates()
-
-
 def detect_steam_install_path() -> str:
-    global _STEAM_INSTALL_PATH
-    if _STEAM_INSTALL_PATH:
-        return _STEAM_INSTALL_PATH
-    # Use find_steam_root which already handles Deck paths
-    path = find_steam_root()
-    if not path:
-        for candidate in _LINUX_STEAM_PATHS:
-            if os.path.isdir(candidate):
-                path = candidate
-                break
-    _STEAM_INSTALL_PATH = path
-    logger.info(f"LumaDeck: Steam install path set to {_STEAM_INSTALL_PATH}")
-    return _STEAM_INSTALL_PATH or ""
+    return find_steam_root() or ""
 
 
 def _parse_vdf_simple(content: str) -> Dict[str, any]:
