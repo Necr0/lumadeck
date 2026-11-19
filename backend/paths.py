@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+from droiddeck_compat import is_droiddeck as _is_droiddeck, selected_client as _dd_client, steam_roots as _dd_steam_roots
 from typing import Optional
 
 try:
@@ -163,6 +164,8 @@ def _home_candidates(home, expanded, home_rels, expanded_rels=None, extras=()):
 def steam_root_candidates() -> list:
     """Canonical Steam-root candidate list (a fresh copy). The single source of
     truth other modules must use instead of keeping their own hardcoded copy."""
+    if _is_droiddeck():
+        return _dd_steam_roots(_REAL_HOME)
     return list(_STEAM_PATHS)
 
 
@@ -176,10 +179,11 @@ def home_candidates(home_rels, expanded_rels=None, extras=()) -> list:
 
 def find_steam_root() -> Optional[str]:
     """Search well-known locations for the Steam installation."""
-    for path in _STEAM_PATHS:
+    candidates = steam_root_candidates()
+    for path in candidates:
         if os.path.isdir(path) and os.path.isfile(os.path.join(path, "steam.sh")):
             return path
-    for path in _STEAM_PATHS:
+    for path in candidates:
         if os.path.isdir(path):
             return path
     return None
@@ -387,6 +391,7 @@ def mapped_libraries(names=_MAPPED_NAMES, proc_root: str = "/proc") -> frozenset
 # the restart and the health rows must ask this and not just look for files.
 STEAM_CLIENT_32 = "ubuntu12_32"
 STEAM_CLIENT_64 = "steamrt64"
+STEAM_CLIENT_ARM64 = "steamrtarm64"
 _STEAM_CLIENT_MARKER = ".steam-enable-steamrt64-client"
 _CLIENT_ARCH_TTL = 2.0
 _client_arch_cache: dict = {"at": 0.0, "arch": None}
@@ -396,6 +401,9 @@ def detect_steam_client_arch(proc_root: str = "/proc", steam_root: Optional[str]
     """One pass over /proc/*/cmdline for a Steam client binary; the marker as
     the fallback; the 32-bit client as the answer for everything else."""
     import glob as _glob
+    if _is_droiddeck():
+        client = _dd_client(proc_root=proc_root)
+        return STEAM_CLIENT_64 if client == "x86_64" else STEAM_CLIENT_ARM64
     try:
         for cmd_path in _glob.glob(os.path.join(proc_root, "*", "cmdline")):
             try:
@@ -403,6 +411,8 @@ def detect_steam_client_arch(proc_root: str = "/proc", steam_root: Optional[str]
                     argv0 = f.read(4096).split(b"\0", 1)[0].decode("utf-8", "replace")
             except Exception:
                 continue
+            if argv0.endswith("/" + STEAM_CLIENT_ARM64 + "/steam"):
+                return STEAM_CLIENT_ARM64
             if argv0.endswith("/" + STEAM_CLIENT_64 + "/steam"):
                 return STEAM_CLIENT_64
             if argv0.endswith("/" + STEAM_CLIENT_32 + "/steam"):
